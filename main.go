@@ -1,23 +1,22 @@
 package main
 
 import (
+	"fmt"
 	"gopkg.in/urfave/cli.v1"
 	"os"
-	"fmt"
 )
 
 var flags = []cli.Flag{
 	cli.StringFlag{
-		Name: "bucket",
-		EnvVar: "SSSTASH_BUCKET",
+		Name:   "bucket",
+		EnvVar: "SSSTASH_S3_BUCKET",
 	},
 	cli.StringFlag{
-		Name: "prefix",
-		EnvVar: "SSSTASH_PREFIX",
+		Name:   "prefix",
+		EnvVar: "SSSTASH_S3_PREFIX",
 	},
 	cli.StringFlag{
-		Name: "key",
-		EnvVar: "SSSTASH_KEY_ID",
+		Name: "profile",
 	},
 }
 
@@ -25,16 +24,16 @@ func main() {
 	app := cli.NewApp()
 	app.Commands = []cli.Command{
 		{
-			Name: "list",
+			Name:    "list",
 			Aliases: []string{"ls"},
-			Flags: flags,
-			Action: func (c *cli.Context) error {
+			Flags:   flags,
+			Action: func(c *cli.Context) error {
 				app, err := buildApp(c)
 				if err != nil {
 					return err
 				}
 
-				err = app.ListIter(func (name string) bool {
+				err = app.ListIter(func(name string) bool {
 					fmt.Println(name)
 					return true
 				})
@@ -43,26 +42,37 @@ func main() {
 		},
 		{
 			Name: "put",
-			Flags: flags,
-			Action: func (c *cli.Context) error {
+			Flags: append(
+				flags,
+				cli.StringFlag{
+					Name:   "key",
+					EnvVar: "SSSTASH_KEY_ID",
+				},
+			),
+			Action: func(c *cli.Context) error {
 				if err := validateArgsLength(c, 2, 2); err != nil {
 					return err
 				}
-				key := c.Args().Get(0)
+				name := c.Args().Get(0)
 				val := c.Args().Get(1)
+
+				keyID := c.String("key")
+				if keyID == "" {
+					return fmt.Errorf("key ID is not specified")
+				}
 
 				app, err := buildApp(c)
 				if err != nil {
 					return err
 				}
 
-				return wrapError(app.Put(key, val))
+				return wrapError(app.Put(name, val, keyID))
 			},
 		},
 		{
-			Name: "get",
+			Name:  "get",
 			Flags: flags,
-			Action: func (c *cli.Context) error {
+			Action: func(c *cli.Context) error {
 				if err := validateArgsLength(c, 1, 1); err != nil {
 					return err
 				}
@@ -77,10 +87,10 @@ func main() {
 			},
 		},
 		{
-			Name: "delete",
+			Name:    "delete",
 			Aliases: []string{"rm"},
-			Flags: flags,
-			Action: func (c *cli.Context) error {
+			Flags:   flags,
+			Action: func(c *cli.Context) error {
 				if err := validateArgsLength(c, 1, 1); err != nil {
 					return err
 				}
@@ -95,6 +105,7 @@ func main() {
 			},
 		},
 	}
+
 	app.Run(os.Args)
 }
 
@@ -119,15 +130,15 @@ func validateArgsLength(c *cli.Context, min int, max int) error {
 }
 
 func buildApp(c *cli.Context) (*App, error) {
-	b := c.String("bucket")
-	p := c.String("prefix")
-	k := c.String("key")
+	bucket := c.String("bucket")
+	prefix := c.String("prefix")
+	profile := c.String("profile")
 
-	if b == "" {
+	if bucket == "" {
 		return nil, cli.NewExitError("S3 Bucket is not specified", 1)
 	}
 
-	return NewApp(b, p, k), nil
+	return NewApp(bucket, prefix, profile), nil
 }
 
 func wrapError(err error) error {

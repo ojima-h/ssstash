@@ -17,33 +17,35 @@ import (
 type App struct {
 	Bucket string
 	Prefix string
-	KeyID  string
 
-	s3  *s3.S3
-	enc *s3crypto.EncryptionClient
-	dec *s3crypto.DecryptionClient
+	sess *session.Session
+	s3   *s3.S3
 }
 
-func NewApp(bucket string, prefix string, keyID string) *App {
+func NewApp(bucket string, prefix string, profile string) *App {
 	if prefix != "" && !strings.HasSuffix(prefix, "/") {
 		prefix += "/"
 	}
 
-	sess := session.Must(session.NewSession())
+	var sess *session.Session
+	if profile != "" {
+		sess = session.Must(session.NewSessionWithOptions(session.Options{
+			Profile:           profile,
+			SharedConfigState: session.SharedConfigEnable,
+		}))
+	} else {
+		sess = session.Must(session.NewSessionWithOptions(session.Options{
+			SharedConfigState: session.SharedConfigEnable,
+		}))
+	}
 	svc := s3.New(sess)
-
-	handler := s3crypto.NewKMSKeyGenerator(kms.New(sess), keyID)
-	enc := s3crypto.NewEncryptionClient(sess, s3crypto.AESGCMContentCipherBuilder(handler))
-	dec := s3crypto.NewDecryptionClient(sess)
 
 	return &App{
 		Bucket: bucket,
 		Prefix: prefix,
-		KeyID:  keyID,
 
-		s3:  svc,
-		enc: enc,
-		dec: dec,
+		sess: sess,
+		s3:   svc,
 	}
 }
 
@@ -63,12 +65,11 @@ func (a *App) ListIter(fn func(string) bool) error {
 	})
 }
 
-func (a *App) Put(name string, val string) error {
+func (a *App) Put(name string, val string, keyID string) error {
 	key := a.Prefix + name
 
-	if a.KeyID == "" {
-		return fmt.Errorf("key ID is not specified")
-	}
+	handler := s3crypto.NewKMSKeyGenerator(kms.New(a.sess), keyID)
+	enc := s3crypto.NewEncryptionClient(a.sess, s3crypto.AESGCMContentCipherBuilder(handler))
 
 	var body io.ReadSeeker
 	if val == "-" {
@@ -90,7 +91,7 @@ func (a *App) Put(name string, val string) error {
 		body = bytes.NewReader([]byte(val))
 	}
 
-	_, err := a.enc.PutObject(&s3.PutObjectInput{
+	_, err := enc.PutObject(&s3.PutObjectInput{
 		Bucket: aws.String(a.Bucket),
 		Key:    aws.String(key),
 		Body:   body,
@@ -102,7 +103,9 @@ func (a *App) Put(name string, val string) error {
 func (a *App) Get(name string) error {
 	key := a.Prefix + name
 
-	out, err := a.dec.GetObject(&s3.GetObjectInput{
+	dec := s3crypto.NewDecryptionClient(a.sess)
+
+	out, err := dec.GetObject(&s3.GetObjectInput{
 		Bucket: aws.String(a.Bucket),
 		Key:    aws.String(key),
 	})
