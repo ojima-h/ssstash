@@ -10,14 +10,17 @@ var flags = []cli.Flag{
 	cli.StringFlag{
 		Name:   "bucket",
 		EnvVar: "SSSTASH_S3_BUCKET",
+		Usage: "S3 bucket where credentials are saved (required)",
 	},
 	cli.StringFlag{
 		Name:   "prefix",
 		EnvVar: "SSSTASH_S3_PREFIX",
+		Usage: "S3 prefix under which credentials are saved",
 	},
 	cli.StringFlag{
 		Name: "profile",
 		EnvVar: "SSSTASH_AWS_PROFILE",
+		Usage: "Use a specific profile from your .aws credential file.",
 	},
 }
 
@@ -27,6 +30,7 @@ func main() {
 	app.Commands = []cli.Command{
 		{
 			Name:    "list",
+			Usage: "List saved credentials",
 			Aliases: []string{"ls"},
 			Flags:   flags,
 			Action: func(c *cli.Context) error {
@@ -44,11 +48,14 @@ func main() {
 		},
 		{
 			Name: "put",
+			Usage: "Save the credential in S3",
+			ArgsUsage: "NAME VALUE",
 			Flags: append(
 				flags,
 				cli.StringFlag{
 					Name:   "key",
-					EnvVar: "SSSTASH_KEY_ID",
+					EnvVar: "SSSTASH_KMS_KEY_ARN",
+					Usage: "KMS Key ARN to encrypt/decrypt credentials (required)",
 				},
 			),
 			Action: func(c *cli.Context) error {
@@ -73,6 +80,8 @@ func main() {
 		},
 		{
 			Name:  "get",
+			Usage: "Get the credential from S3",
+			ArgsUsage: "NAME",
 			Flags: flags,
 			Action: func(c *cli.Context) error {
 				if err := validateArgsLength(c, 1, 1); err != nil {
@@ -90,6 +99,8 @@ func main() {
 		},
 		{
 			Name:    "delete",
+			Usage: "Delete the entry",
+			ArgsUsage: "NAME",
 			Aliases: []string{"rm"},
 			Flags:   flags,
 			Action: func(c *cli.Context) error {
