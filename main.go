@@ -17,11 +17,13 @@ var flags = []cli.Flag{
 	},
 	cli.StringFlag{
 		Name: "profile",
+		EnvVar: "SSSTASH_AWS_PROFILE",
 	},
 }
 
 func main() {
 	app := cli.NewApp()
+	app.Version = "0.0.1"
 	app.Commands = []cli.Command{
 		{
 			Name:    "list",
