@@ -2,7 +2,7 @@
 # build binary distributions for linux/amd64 and darwin/amd64
 set -e
 
-NAME="emrcmd"
+NAME="ssstash"
 VERSION=0.0.1
 
 TARGET_OS="windows linux darwin"
@@ -24,5 +24,6 @@ for os in $TARGET_OS; do
     echo "building $target ..."
     GOOS=$os GOARCH=$arch \
         go build -ldflags="-s -w" -o $target || exit 1
+    gzip $target
   done
 done
