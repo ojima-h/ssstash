@@ -1,15 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3crypto"
-	"strings"
-	"bytes"
-	"fmt"
+	"io"
 	"io/ioutil"
+	"os"
+	"strings"
 )
 
 type App struct {
@@ -65,13 +67,33 @@ func (a *App) Put(name string, val string) error {
 	key := a.Prefix + name
 
 	if a.KeyID == "" {
-		return fmt.Errorf("Key ID is not specified")
+		return fmt.Errorf("key ID is not specified")
+	}
+
+	var body io.ReadSeeker
+	if val == "-" {
+		b, err := ioutil.ReadAll(os.Stdin)
+		if err != nil {
+			return err
+		}
+
+		body = bytes.NewReader(b)
+	} else if val[0] == '@' {
+		f, err := os.Open(val[1:])
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		body = f
+	} else {
+		body = bytes.NewReader([]byte(val))
 	}
 
 	_, err := a.enc.PutObject(&s3.PutObjectInput{
 		Bucket: aws.String(a.Bucket),
-		Key: aws.String(key),
-		Body: aws.ReadSeekCloser(bytes.NewBufferString(val)),
+		Key:    aws.String(key),
+		Body:   body,
 	})
 
 	return err
@@ -82,7 +104,7 @@ func (a *App) Get(name string) error {
 
 	out, err := a.dec.GetObject(&s3.GetObjectInput{
 		Bucket: aws.String(a.Bucket),
-		Key: aws.String(key),
+		Key:    aws.String(key),
 	})
 	if err != nil {
 		return err
@@ -93,7 +115,7 @@ func (a *App) Get(name string) error {
 		return err
 	}
 
-	fmt.Println(string(body))
+	fmt.Print(string(body))
 
 	return nil
 }
@@ -101,7 +123,7 @@ func (a *App) Get(name string) error {
 func (a *App) Delete(name string) error {
 	_, err := a.s3.DeleteObject(&s3.DeleteObjectInput{
 		Bucket: aws.String(a.Bucket),
-		Key: aws.String(a.Prefix + name),
+		Key:    aws.String(a.Prefix + name),
 	})
 
 	return err
